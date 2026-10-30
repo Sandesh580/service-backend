@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="LoginCheck/LoginCheck.csproj" />
+  <Project Path="LoginCheck.Api/LoginCheck.Api.csproj" />
+  <Project Path="LoginCheck.Application/LoginCheck.Application.csproj" />
+  <Project Path="LoginCheck.Domain/LoginCheck.Domain.csproj" />
+  <Project Path="LoginCheck.Infrastructure/LoginCheck.Infrastructure.csproj" />
+  <Project Path="LoginCheck.Tests/LoginCheck.Tests.csproj" />
+</Solution>

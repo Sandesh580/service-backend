@@ -1,0 +1,24 @@
+@LoginCheck_HostAddress = http://localhost:5012
+
+### Weather Forecast
+GET {{LoginCheck_HostAddress}}/weatherforecast/
+Accept: application/json
+
+### Register
+POST {{LoginCheck_HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "userName": "alice",
+  "email": "alice@example.com",
+  "password": "Password123!"
+}
+
+### Login
+POST {{LoginCheck_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "alice@example.com",
+  "password": "Password123!"
+}

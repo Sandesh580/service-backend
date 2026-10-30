@@ -1,0 +1,76 @@
+using LoginCheck.Application.DTOs;
+using LoginCheck.Application.Interfaces;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+
+namespace LoginCheck.Controllers;
+
+[ApiController]
+[Authorize(Roles = "Manager,Admin")]
+[Route("api/[controller]")]
+public class DashboardController : ControllerBase
+{
+    private readonly IDashboardService _dashboardService;
+
+    public DashboardController(IDashboardService dashboardService)
+    {
+        _dashboardService = dashboardService;
+    }
+
+    [HttpGet("stats")]
+    public async Task<IActionResult> GetStats()
+    {
+        var stats = await _dashboardService.GetStatsAsync();
+        return Ok(stats);
+    }
+
+    [HttpGet("requests")]
+    public async Task<IActionResult> GetRequests([FromQuery] string? status, [FromQuery] string? search)
+    {
+        var requests = await _dashboardService.GetRequestsAsync(status, search);
+        return Ok(requests);
+    }
+
+    [HttpPost("requests")]
+    public async Task<IActionResult> CreateRequest([FromBody] CreateServiceRequestDto dto)
+    {
+        var result = await _dashboardService.CreateRequestAsync(dto);
+        return CreatedAtAction(nameof(GetRequests), result);
+    }
+
+    [HttpPatch("requests/{id}/assignment")]
+    public async Task<IActionResult> UpdateAssignmentAndPriority(int id, [FromBody] UpdateAssignmentAndPriorityDto dto)
+    {
+        try
+        {
+            var result = await _dashboardService.UpdateAssignmentAndPriorityAsync(id, dto.Priority, dto.AssignedTechnician, dto.ManagerNote);
+            if (result is null) return NotFound();
+            return Ok(result);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
+
+    [HttpPatch("requests/{id}/status")]
+    public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateStatusDto dto)
+    {
+        var result = await _dashboardService.UpdateStatusAsync(id, dto.Status, dto.ManagerNote);
+        if (result is null) return NotFound();
+        return Ok(result);
+    }
+}
+
+public class UpdateStatusDto
+{
+    public string Status { get; set; } = string.Empty;
+    [System.ComponentModel.DataAnnotations.StringLength(2000)] public string? ManagerNote { get; set; }
+}
+
+public class UpdateAssignmentAndPriorityDto
+{
+    public string Priority { get; set; } = string.Empty;
+    public string? AssignedTechnician { get; set; }
+    [System.ComponentModel.DataAnnotations.StringLength(2000)] public string? ManagerNote { get; set; }
+}

@@ -1,0 +1,12 @@
+using LoginCheck.Application.DTOs;
+
+namespace LoginCheck.Application.Interfaces;
+
+public interface IDashboardService
+{
+    Task<DashboardStatsDto> GetStatsAsync();
+    Task<IEnumerable<ServiceRequestDto>> GetRequestsAsync(string? status = null, string? search = null);
+    Task<ServiceRequestDto> CreateRequestAsync(CreateServiceRequestDto dto);
+    Task<ServiceRequestDto?> UpdateStatusAsync(int id, string status, string? managerNote);
+    Task<ServiceRequestDto?> UpdateAssignmentAndPriorityAsync(int id, string priority, string? assignedTechnician, string? managerNote);
+}
