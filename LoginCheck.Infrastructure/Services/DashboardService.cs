@@ -46,8 +46,10 @@ public class DashboardService : IDashboardService
     {
         var query = BuildRequestQuery(status, search);
         var totalCount = await query.CountAsync();
-        var items = await ProjectRequests(query).OrderByDescending(r => r.Date)
-            .ThenByDescending(r => r.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+        var orderedQuery = string.Equals(status?.Trim(), "completed", StringComparison.OrdinalIgnoreCase)
+            ? query.OrderByDescending(r => r.TechnicianActionAt ?? r.Date).ThenByDescending(r => r.Id)
+            : query.OrderByDescending(r => r.Date).ThenByDescending(r => r.Id);
+        var items = await ProjectRequests(orderedQuery).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
         return new PagedResultDto<ServiceRequestDto>
         {
             Items = items, Page = page, PageSize = pageSize, TotalCount = totalCount,
