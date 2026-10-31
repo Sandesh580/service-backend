@@ -9,7 +9,6 @@ public class ServiceRequestDto
     public string Issue { get; set; } = string.Empty;
     public string ProblemDescription { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
-    public string Priority { get; set; } = string.Empty;
     public decimal? AmountPaid { get; set; }
     public string ManagerNote { get; set; } = string.Empty;
     public string? AssignedTechnician { get; set; }
@@ -59,7 +58,6 @@ public class CreateServiceRequestDto
     public string CustomerName { get; set; } = string.Empty;
     public string Appliance { get; set; } = string.Empty;
     public string Issue { get; set; } = string.Empty;
-    public string Priority { get; set; } = "-";
     public string? AssignedTechnician { get; set; }
     public string ApplianceType { get; set; } = string.Empty;
     public string ApplianceBrand { get; set; } = string.Empty;

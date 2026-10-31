@@ -68,7 +68,7 @@ public sealed class CustomerController : ControllerBase
             {
                 Id = request.Id, RequestNumber = request.RequestNumber, CustomerName = request.CustomerName,
                 Appliance = request.Appliance, Issue = request.Issue, ProblemDescription = request.ProblemDescription, Status = request.Status,
-                Priority = request.Priority, AmountPaid = request.AmountPaid, AssignedTechnician = request.AssignedTechnician,
+                AmountPaid = request.AmountPaid, AssignedTechnician = request.AssignedTechnician,
                 AssignedTechnicianPhone = request.Status != "Completed" && request.Status != "Rejected"
                     ? _db.Users
                     .Where(technician => technician.Role == "Technician" &&
@@ -123,7 +123,7 @@ public sealed class CustomerController : ControllerBase
         var request = new ServiceRequest
         {
             RequestNumber = next.ToString(), CustomerName = customer.UserName,
-            Appliance = appliance, Issue = issue, ProblemDescription = description, Status = "New", Priority = "-",
+            Appliance = appliance, Issue = issue, ProblemDescription = description, Status = "New",
             Date = DateTime.UtcNow, CreatedAt = DateTime.UtcNow, CustomerUserId = userId,
             ApplianceBrand = brand, ApplianceModel = model, SerialNumber = dto.SerialNumber.Trim(),
             CustomerPhone = customerPhone, ServiceAddress = serviceAddress,
@@ -136,7 +136,7 @@ public sealed class CustomerController : ControllerBase
         return Created("/api/customer/requests", new
         {
             request.Id, request.RequestNumber, request.Appliance, request.Issue, request.Status,
-            request.Priority, request.Date, request.PreferredServiceDate, request.Latitude, request.Longitude
+            request.Date, request.PreferredServiceDate, request.Latitude, request.Longitude
         });
     }
 

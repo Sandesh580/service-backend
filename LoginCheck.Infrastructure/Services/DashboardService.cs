@@ -93,7 +93,6 @@ public class DashboardService : IDashboardService
                 Issue = r.Issue,
                 ProblemDescription = r.ProblemDescription,
                 Status = r.Status,
-                Priority = r.Priority,
                 AmountPaid = r.AmountPaid,
                 AssignedTechnician = r.AssignedTechnician,
                 Date = r.Date,
@@ -126,16 +125,13 @@ public class DashboardService : IDashboardService
         var lastRequestNumber = await _context.ServiceRequests.OrderByDescending(item => item.Id).Select(item => item.RequestNumber).FirstOrDefaultAsync();
         var nextNumber = int.TryParse(lastRequestNumber, out var previousNumber) ? previousNumber + 1 : 2401;
         var assignedName = string.IsNullOrWhiteSpace(dto.AssignedTechnician) ? null : dto.AssignedTechnician.Trim();
-        var priority = string.IsNullOrWhiteSpace(dto.Priority) ? "-" : dto.Priority.Trim();
-        if (priority is not ("-" or "Low" or "Medium" or "High"))
-            throw new InvalidOperationException("Priority must be unset, Low, Medium, or High.");
         var assignedId = assignedName == null ? null : await _context.Users
             .Where(user => user.Role == "Technician" && user.UserName == assignedName)
             .Select(user => (int?)user.Id).FirstOrDefaultAsync();
         var request = new ServiceRequest
         {
             RequestNumber = nextNumber.ToString(), CustomerName = dto.CustomerName, Appliance = dto.Appliance,
-            Issue = dto.Issue, Status = "New", Priority = priority, AssignedTechnician = assignedName,
+            Issue = dto.Issue, Status = "New", AssignedTechnician = assignedName,
             AssignedTechnicianId = assignedId, ManagerNote = dto.ManagerNote?.Trim() ?? string.Empty,
             Date = DateTime.UtcNow, CreatedAt = DateTime.UtcNow
         };
@@ -150,18 +146,13 @@ public class DashboardService : IDashboardService
         return ToResponse(request);
     }
 
-    public async Task<ServiceRequestDto?> UpdateAssignmentAndPriorityAsync(int id, string priority, string? assignedTechnician, string? managerNote)
+    public async Task<ServiceRequestDto?> UpdateAssignmentAsync(int id, string? assignedTechnician, string? managerNote)
     {
-        var normalizedPriority = priority.Trim();
-        if (normalizedPriority is not ("-" or "Low" or "Medium" or "High"))
-            throw new InvalidOperationException("Priority must be unset, Low, Medium, or High.");
         var request = await _context.ServiceRequests.Include(item => item.Parts).ThenInclude(link => link.InventoryPart)
             .SingleOrDefaultAsync(item => item.Id == id);
         if (request is null) return null;
 
         var previousTechnicianId = request.AssignedTechnicianId;
-        var previousPriority = request.Priority;
-        request.Priority = normalizedPriority;
         request.AssignedTechnician = string.IsNullOrWhiteSpace(assignedTechnician) ? null : assignedTechnician.Trim();
         request.AssignedTechnicianId = request.AssignedTechnician == null
             ? null
@@ -178,10 +169,10 @@ public class DashboardService : IDashboardService
         if (reassigned && previousTechnicianId is not null)
             AddTechnicianNotification(previousTechnicianId.Value, request, "Service call reassigned",
                 ManagerMessage(request, "This service call has been reassigned to another technician.", request.ManagerNote));
-        if (request.AssignedTechnicianId is not null && (reassigned || previousPriority != request.Priority || !string.IsNullOrWhiteSpace(request.ManagerNote)))
+        if (request.AssignedTechnicianId is not null && (reassigned || !string.IsNullOrWhiteSpace(request.ManagerNote)))
         {
             var title = reassigned ? "Service call assigned" : "Service call updated by manager";
-            var summary = reassigned ? "A service call has been assigned to you." : $"The manager updated this call. Priority: {request.Priority}.";
+            var summary = reassigned ? "A service call has been assigned to you." : "The manager updated this call.";
             AddTechnicianNotification(request.AssignedTechnicianId.Value, request, title, ManagerMessage(request, summary, request.ManagerNote));
         }
         await _context.SaveChangesAsync();
@@ -228,7 +219,7 @@ public class DashboardService : IDashboardService
     {
         Id = request.Id, RequestNumber = request.RequestNumber, CustomerName = request.CustomerName,
         Appliance = request.Appliance, Issue = request.Issue, ProblemDescription = request.ProblemDescription,
-        Status = request.Status, Priority = request.Priority, AmountPaid = request.AmountPaid,
+        Status = request.Status, AmountPaid = request.AmountPaid,
         AssignedTechnician = request.AssignedTechnician, ManagerNote = request.ManagerNote, Date = request.Date,
         AssignedTechnicianId = request.AssignedTechnicianId, CustomerUserId = request.CustomerUserId,
         ApplianceBrand = request.ApplianceBrand, ApplianceModel = request.ApplianceModel, SerialNumber = request.SerialNumber,

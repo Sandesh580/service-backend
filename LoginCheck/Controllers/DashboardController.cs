@@ -46,11 +46,11 @@ public class DashboardController : ControllerBase
     }
 
     [HttpPatch("requests/{id}/assignment")]
-    public async Task<IActionResult> UpdateAssignmentAndPriority(int id, [FromBody] UpdateAssignmentAndPriorityDto dto)
+    public async Task<IActionResult> UpdateAssignment(int id, [FromBody] UpdateAssignmentDto dto)
     {
         try
         {
-            var result = await _dashboardService.UpdateAssignmentAndPriorityAsync(id, dto.Priority, dto.AssignedTechnician, dto.ManagerNote);
+            var result = await _dashboardService.UpdateAssignmentAsync(id, dto.AssignedTechnician, dto.ManagerNote);
             if (result is null) return NotFound();
             return Ok(result);
         }
@@ -75,9 +75,8 @@ public class UpdateStatusDto
     [System.ComponentModel.DataAnnotations.StringLength(2000)] public string? ManagerNote { get; set; }
 }
 
-public class UpdateAssignmentAndPriorityDto
+public class UpdateAssignmentDto
 {
-    public string Priority { get; set; } = string.Empty;
     public string? AssignedTechnician { get; set; }
     [System.ComponentModel.DataAnnotations.StringLength(2000)] public string? ManagerNote { get; set; }
 }

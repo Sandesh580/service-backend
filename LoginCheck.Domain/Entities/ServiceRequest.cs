@@ -12,8 +12,6 @@ public class ServiceRequest
     // Status: New | AwaitingParts | Scheduled | InProgress | Completed | PendingApproval
     public string Status { get; set; } = "New";
 
-    // Priority: - (not set) | High | Medium | Low
-    public string Priority { get; set; } = "-";
     public decimal? AmountPaid { get; set; }
     public string ManagerNote { get; set; } = string.Empty;
 

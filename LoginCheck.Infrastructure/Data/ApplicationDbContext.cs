@@ -76,7 +76,6 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Issue).IsRequired().HasMaxLength(500);
             entity.Property(e => e.ProblemDescription).IsRequired().HasMaxLength(1000);
             entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.Priority).IsRequired().HasMaxLength(20);
             entity.Property(e => e.AmountPaid).HasPrecision(10, 2);
             entity.Property(e => e.ManagerNote).IsRequired().HasMaxLength(2000);
             entity.Property(e => e.AssignedTechnician).HasMaxLength(100);

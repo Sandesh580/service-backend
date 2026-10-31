@@ -93,7 +93,7 @@ public sealed class TechnicianRequestsController : ControllerBase
     {
         Id = request.Id, RequestNumber = request.RequestNumber, CustomerName = request.CustomerName,
         Appliance = request.Appliance, Issue = request.Issue, ProblemDescription = request.ProblemDescription, Status = request.Status,
-        Priority = request.Priority, AmountPaid = request.AmountPaid, AssignedTechnician = request.AssignedTechnician, ManagerNote = request.ManagerNote, Date = request.Date,
+        AmountPaid = request.AmountPaid, AssignedTechnician = request.AssignedTechnician, ManagerNote = request.ManagerNote, Date = request.Date,
         CustomerPhone = request.CustomerPhone, ServiceAddress = request.ServiceAddress, Latitude = request.Latitude, Longitude = request.Longitude,
         PreferredServiceDate = request.PreferredServiceDate, NextVisitDate = request.NextVisitDate, IssueCategory = request.IssueCategory,
         TechnicianNote = request.TechnicianNote, RejectionReason = request.RejectionReason,

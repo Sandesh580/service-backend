@@ -143,6 +143,20 @@ using (var scope = app.Services.CreateScope())
         IF COL_LENGTH('dbo.ServiceRequests', 'TechnicianActionAt') IS NULL ALTER TABLE dbo.ServiceRequests ADD TechnicianActionAt datetime2 NULL;
         IF COL_LENGTH('dbo.ServiceRequests', 'AmountPaid') IS NULL ALTER TABLE dbo.ServiceRequests ADD AmountPaid decimal(10,2) NULL;
         IF COL_LENGTH('dbo.ServiceRequests', 'ManagerNote') IS NULL ALTER TABLE dbo.ServiceRequests ADD ManagerNote nvarchar(2000) NOT NULL CONSTRAINT DF_ServiceRequests_ManagerNote DEFAULT N'';
+        IF COL_LENGTH('dbo.ServiceRequests', 'Priority') IS NOT NULL
+        BEGIN
+            DECLARE @priorityDefaultConstraint sysname;
+            SELECT @priorityDefaultConstraint = dc.name
+            FROM sys.default_constraints dc
+            INNER JOIN sys.columns c ON c.default_object_id = dc.object_id
+            WHERE c.object_id = OBJECT_ID(N'dbo.ServiceRequests') AND c.name = N'Priority';
+            IF @priorityDefaultConstraint IS NOT NULL
+            BEGIN
+                DECLARE @dropPriorityDefaultSql nvarchar(500) = N'ALTER TABLE dbo.ServiceRequests DROP CONSTRAINT ' + QUOTENAME(@priorityDefaultConstraint);
+                EXEC sp_executesql @dropPriorityDefaultSql;
+            END;
+            ALTER TABLE dbo.ServiceRequests DROP COLUMN Priority;
+        END;
         IF OBJECT_ID('dbo.ServiceNotifications', 'U') IS NULL CREATE TABLE dbo.ServiceNotifications (Id int IDENTITY(1,1) NOT NULL PRIMARY KEY, RecipientUserId int NOT NULL, ServiceRequestId int NULL, RequestNumber nvarchar(20) NOT NULL DEFAULT N'', Title nvarchar(160) NOT NULL, Message nvarchar(1000) NOT NULL, CreatedAt datetime2 NOT NULL, IsRead bit NOT NULL CONSTRAINT DF_ServiceNotifications_IsRead DEFAULT 0);
         IF OBJECT_ID('dbo.InventoryParts', 'U') IS NULL CREATE TABLE dbo.InventoryParts (Id int IDENTITY(1,1) NOT NULL PRIMARY KEY, Sku nvarchar(40) NOT NULL, Name nvarchar(150) NOT NULL, ApplianceType nvarchar(80) NOT NULL, Description nvarchar(500) NOT NULL DEFAULT N'', QuantityInStock int NOT NULL, UnitPrice decimal(10,2) NOT NULL, CONSTRAINT UQ_InventoryParts_Sku UNIQUE (Sku));
         """);
@@ -171,6 +185,23 @@ using (var scope = app.Services.CreateScope())
         IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ServiceRequests_AssignedTechnicianId' AND object_id = OBJECT_ID('dbo.ServiceRequests')) CREATE INDEX IX_ServiceRequests_AssignedTechnicianId ON dbo.ServiceRequests(AssignedTechnicianId);
         IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ServiceNotifications_RecipientUserId_CreatedAt' AND object_id = OBJECT_ID('dbo.ServiceNotifications')) CREATE INDEX IX_ServiceNotifications_RecipientUserId_CreatedAt ON dbo.ServiceNotifications(RecipientUserId, CreatedAt DESC);
         """);
+    }
+    if (isMySql)
+    {
+        var connection = dbContext.Database.GetDbConnection();
+        var wasOpen = connection.State == System.Data.ConnectionState.Open;
+        if (!wasOpen) connection.Open();
+        try
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ServiceRequests' AND COLUMN_NAME = 'Priority'";
+            if (Convert.ToInt32(command.ExecuteScalar()) > 0)
+                dbContext.Database.ExecuteSqlRaw("ALTER TABLE `ServiceRequests` DROP COLUMN `Priority`");
+        }
+        finally
+        {
+            if (!wasOpen) connection.Close();
+        }
     }
     if (isMySql)
         SeedInventoryParts(dbContext);
@@ -205,40 +236,40 @@ static void SeedData(ApplicationDbContext db)
     var requests = new List<ServiceRequest>
     {
         // New Requests (4)
-        new() { RequestNumber = "2401", CustomerName = "Liam M.", Appliance = "Bosch Dishwasher",   Issue = "Not draining",          Status = "PendingApproval", Priority = "High",   AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-1) },
-        new() { RequestNumber = "2402", CustomerName = "Sarah J.", Appliance = "LG Refrigerator",    Issue = "Not cooling",           Status = "New",             Priority = "Medium", AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-2) },
-        new() { RequestNumber = "2403", CustomerName = "Tom R.",   Appliance = "Samsung Washer",     Issue = "Leaking water",         Status = "New",             Priority = "High",   AssignedTechnician = null,   Date = DateTime.UtcNow.AddDays(-2) },
-        new() { RequestNumber = "2404", CustomerName = "Emma K.",  Appliance = "GE Oven",            Issue = "Not heating",           Status = "New",             Priority = "Low",    AssignedTechnician = null,   Date = DateTime.UtcNow.AddDays(-3) },
+        new() { RequestNumber = "2401", CustomerName = "Liam M.", Appliance = "Bosch Dishwasher",   Issue = "Not draining",          Status = "PendingApproval",   AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-1) },
+        new() { RequestNumber = "2402", CustomerName = "Sarah J.", Appliance = "LG Refrigerator",    Issue = "Not cooling",           Status = "New", AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-2) },
+        new() { RequestNumber = "2403", CustomerName = "Tom R.",   Appliance = "Samsung Washer",     Issue = "Leaking water",         Status = "New",   AssignedTechnician = null,   Date = DateTime.UtcNow.AddDays(-2) },
+        new() { RequestNumber = "2404", CustomerName = "Emma K.",  Appliance = "GE Oven",            Issue = "Not heating",           Status = "New",    AssignedTechnician = null,   Date = DateTime.UtcNow.AddDays(-3) },
 
         // Awaiting Parts (5)
-        new() { RequestNumber = "2405", CustomerName = "Sarah J.", Appliance = "Whirlpool Dryer",    Issue = "Won't start",           Status = "AwaitingParts",   Priority = "Medium", AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-4) },
-        new() { RequestNumber = "2406", CustomerName = "Mike D.",  Appliance = "KitchenAid Mixer",   Issue = "Motor burnt",           Status = "AwaitingParts",   Priority = "Low",    AssignedTechnician = "SIGN", Date = DateTime.UtcNow.AddDays(-4) },
-        new() { RequestNumber = "2407", CustomerName = "Julia W.", Appliance = "Miele Dishwasher",   Issue = "Not cleaning",          Status = "AwaitingParts",   Priority = "Medium", AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-5) },
-        new() { RequestNumber = "2408", CustomerName = "Alex B.",  Appliance = "Frigidaire Fridge",  Issue = "Ice maker broken",      Status = "AwaitingParts",   Priority = "Low",    AssignedTechnician = null,   Date = DateTime.UtcNow.AddDays(-5) },
-        new() { RequestNumber = "2409", CustomerName = "Nina S.",  Appliance = "Bosch Washer",       Issue = "Vibrating badly",       Status = "AwaitingParts",   Priority = "High",   AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-6) },
+        new() { RequestNumber = "2405", CustomerName = "Sarah J.", Appliance = "Whirlpool Dryer",    Issue = "Won't start",           Status = "AwaitingParts", AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-4) },
+        new() { RequestNumber = "2406", CustomerName = "Mike D.",  Appliance = "KitchenAid Mixer",   Issue = "Motor burnt",           Status = "AwaitingParts",    AssignedTechnician = "SIGN", Date = DateTime.UtcNow.AddDays(-4) },
+        new() { RequestNumber = "2407", CustomerName = "Julia W.", Appliance = "Miele Dishwasher",   Issue = "Not cleaning",          Status = "AwaitingParts", AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-5) },
+        new() { RequestNumber = "2408", CustomerName = "Alex B.",  Appliance = "Frigidaire Fridge",  Issue = "Ice maker broken",      Status = "AwaitingParts",    AssignedTechnician = null,   Date = DateTime.UtcNow.AddDays(-5) },
+        new() { RequestNumber = "2409", CustomerName = "Nina S.",  Appliance = "Bosch Washer",       Issue = "Vibrating badly",       Status = "AwaitingParts",   AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-6) },
 
         // Scheduled (7)
-        new() { RequestNumber = "2410", CustomerName = "Sarah J.", Appliance = "Samsung Fridge",     Issue = "Temperature too warm",  Status = "Scheduled",       Priority = "High",   AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(1) },
-        new() { RequestNumber = "2411", CustomerName = "Michael B.", Appliance = "Whirlpool Washer", Issue = "Loud noise spinning",   Status = "Scheduled",       Priority = "Medium", AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(1) },
-        new() { RequestNumber = "2412", CustomerName = "Chris P.", Appliance = "LG Dryer",           Issue = "Not drying clothes",    Status = "Scheduled",       Priority = "Medium", AssignedTechnician = "SIGN", Date = DateTime.UtcNow.AddDays(2) },
-        new() { RequestNumber = "2413", CustomerName = "Laura F.", Appliance = "GE Dishwasher",      Issue = "Door won't latch",      Status = "Scheduled",       Priority = "Low",    AssignedTechnician = null,   Date = DateTime.UtcNow.AddDays(2) },
-        new() { RequestNumber = "2414", CustomerName = "David C.", Appliance = "Bosch Oven",         Issue = "Temperature off",       Status = "Scheduled",       Priority = "Medium", AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(3) },
-        new() { RequestNumber = "2415", CustomerName = "Anna M.",  Appliance = "KitchenAid Fridge",  Issue = "Water dispenser leaks", Status = "Scheduled",       Priority = "Low",    AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(3) },
-        new() { RequestNumber = "2416", CustomerName = "Ryan T.",  Appliance = "Samsung Dryer",      Issue = "Heating element bad",   Status = "Scheduled",       Priority = "High",   AssignedTechnician = "SIGN", Date = DateTime.UtcNow.AddDays(4) },
+        new() { RequestNumber = "2410", CustomerName = "Sarah J.", Appliance = "Samsung Fridge",     Issue = "Temperature too warm",  Status = "Scheduled",   AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(1) },
+        new() { RequestNumber = "2411", CustomerName = "Michael B.", Appliance = "Whirlpool Washer", Issue = "Loud noise spinning",   Status = "Scheduled", AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(1) },
+        new() { RequestNumber = "2412", CustomerName = "Chris P.", Appliance = "LG Dryer",           Issue = "Not drying clothes",    Status = "Scheduled", AssignedTechnician = "SIGN", Date = DateTime.UtcNow.AddDays(2) },
+        new() { RequestNumber = "2413", CustomerName = "Laura F.", Appliance = "GE Dishwasher",      Issue = "Door won't latch",      Status = "Scheduled",    AssignedTechnician = null,   Date = DateTime.UtcNow.AddDays(2) },
+        new() { RequestNumber = "2414", CustomerName = "David C.", Appliance = "Bosch Oven",         Issue = "Temperature off",       Status = "Scheduled", AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(3) },
+        new() { RequestNumber = "2415", CustomerName = "Anna M.",  Appliance = "KitchenAid Fridge",  Issue = "Water dispenser leaks", Status = "Scheduled",    AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(3) },
+        new() { RequestNumber = "2416", CustomerName = "Ryan T.",  Appliance = "Samsung Dryer",      Issue = "Heating element bad",   Status = "Scheduled",   AssignedTechnician = "SIGN", Date = DateTime.UtcNow.AddDays(4) },
 
         // In Progress (12)
-        new() { RequestNumber = "2417", CustomerName = "Mich W.",  Appliance = "Whirlpool Fridge",   Issue = "Compressor noise",      Status = "InProgress",      Priority = "High",   AssignedTechnician = "PMD",  Date = DateTime.UtcNow },
-        new() { RequestNumber = "2418", CustomerName = "Lacios M.", Appliance = "LG Washer",         Issue = "Not spinning",          Status = "InProgress",      Priority = "Medium", AssignedTechnician = "SIGN", Date = DateTime.UtcNow },
-        new() { RequestNumber = "2419", CustomerName = "Carol H.", Appliance = "Bosch Dryer",        Issue = "Overheating",           Status = "InProgress",      Priority = "High",   AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-1) },
-        new() { RequestNumber = "2420", CustomerName = "Steve G.", Appliance = "Samsung Oven",       Issue = "One burner not working", Status = "InProgress",     Priority = "Low",    AssignedTechnician = null,   Date = DateTime.UtcNow.AddDays(-1) },
-        new() { RequestNumber = "2421", CustomerName = "Lucy A.",  Appliance = "GE Refrigerator",    Issue = "Door seal broken",      Status = "InProgress",      Priority = "Medium", AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-1) },
-        new() { RequestNumber = "2422", CustomerName = "Mark B.",  Appliance = "Miele Washer",       Issue = "Error code E5",         Status = "InProgress",      Priority = "High",   AssignedTechnician = "SIGN", Date = DateTime.UtcNow.AddDays(-1) },
-        new() { RequestNumber = "2423", CustomerName = "Fiona K.", Appliance = "Frigidaire Dryer",   Issue = "Drum not turning",      Status = "InProgress",      Priority = "Medium", AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-2) },
-        new() { RequestNumber = "2424", CustomerName = "Jack P.",  Appliance = "LG Dishwasher",      Issue = "Water not draining",    Status = "InProgress",      Priority = "High",   AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-2) },
-        new() { RequestNumber = "2425", CustomerName = "Olivia R.", Appliance = "Whirlpool Oven",    Issue = "Oven door cracked",     Status = "InProgress",      Priority = "Low",    AssignedTechnician = "SIGN", Date = DateTime.UtcNow.AddDays(-2) },
-        new() { RequestNumber = "2426", CustomerName = "Brian S.", Appliance = "Bosch Refrigerator", Issue = "Not making ice",        Status = "InProgress",      Priority = "Medium", AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-3) },
-        new() { RequestNumber = "2427", CustomerName = "Nancy T.", Appliance = "Samsung Washer",     Issue = "Won't spin fast",       Status = "InProgress",      Priority = "Low",    AssignedTechnician = null,   Date = DateTime.UtcNow.AddDays(-3) },
-        new() { RequestNumber = "2428", CustomerName = "Paul L.",  Appliance = "GE Dryer",           Issue = "Timer broken",          Status = "InProgress",      Priority = "Medium", AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-3) },
+        new() { RequestNumber = "2417", CustomerName = "Mich W.",  Appliance = "Whirlpool Fridge",   Issue = "Compressor noise",      Status = "InProgress",   AssignedTechnician = "PMD",  Date = DateTime.UtcNow },
+        new() { RequestNumber = "2418", CustomerName = "Lacios M.", Appliance = "LG Washer",         Issue = "Not spinning",          Status = "InProgress", AssignedTechnician = "SIGN", Date = DateTime.UtcNow },
+        new() { RequestNumber = "2419", CustomerName = "Carol H.", Appliance = "Bosch Dryer",        Issue = "Overheating",           Status = "InProgress",   AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-1) },
+        new() { RequestNumber = "2420", CustomerName = "Steve G.", Appliance = "Samsung Oven",       Issue = "One burner not working", Status = "InProgress",    AssignedTechnician = null,   Date = DateTime.UtcNow.AddDays(-1) },
+        new() { RequestNumber = "2421", CustomerName = "Lucy A.",  Appliance = "GE Refrigerator",    Issue = "Door seal broken",      Status = "InProgress", AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-1) },
+        new() { RequestNumber = "2422", CustomerName = "Mark B.",  Appliance = "Miele Washer",       Issue = "Error code E5",         Status = "InProgress",   AssignedTechnician = "SIGN", Date = DateTime.UtcNow.AddDays(-1) },
+        new() { RequestNumber = "2423", CustomerName = "Fiona K.", Appliance = "Frigidaire Dryer",   Issue = "Drum not turning",      Status = "InProgress", AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-2) },
+        new() { RequestNumber = "2424", CustomerName = "Jack P.",  Appliance = "LG Dishwasher",      Issue = "Water not draining",    Status = "InProgress",   AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-2) },
+        new() { RequestNumber = "2425", CustomerName = "Olivia R.", Appliance = "Whirlpool Oven",    Issue = "Oven door cracked",     Status = "InProgress",    AssignedTechnician = "SIGN", Date = DateTime.UtcNow.AddDays(-2) },
+        new() { RequestNumber = "2426", CustomerName = "Brian S.", Appliance = "Bosch Refrigerator", Issue = "Not making ice",        Status = "InProgress", AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-3) },
+        new() { RequestNumber = "2427", CustomerName = "Nancy T.", Appliance = "Samsung Washer",     Issue = "Won't spin fast",       Status = "InProgress",    AssignedTechnician = null,   Date = DateTime.UtcNow.AddDays(-3) },
+        new() { RequestNumber = "2428", CustomerName = "Paul L.",  Appliance = "GE Dryer",           Issue = "Timer broken",          Status = "InProgress", AssignedTechnician = "PMD",  Date = DateTime.UtcNow.AddDays(-3) },
 
         // Completed (135 — adding representative sample)
     };
@@ -253,7 +284,6 @@ static void SeedData(ApplicationDbContext db)
             Appliance = new[] { "Samsung Fridge", "LG Washer", "Bosch Dryer", "GE Oven", "Whirlpool Dishwasher" }[i % 5],
             Issue = new[] { "Not cooling", "Leaking", "Not heating", "Noisy", "Door broken" }[i % 5],
             Status = "Completed",
-            Priority = new[] { "High", "Medium", "Low" }[i % 3],
             AssignedTechnician = new[] { "PMD", "SIGN", "TECH1" }[i % 3],
             Date = DateTime.UtcNow.AddDays(-(i + 5))
         });
