@@ -25,8 +25,15 @@ public class DashboardController : ControllerBase
     }
 
     [HttpGet("requests")]
-    public async Task<IActionResult> GetRequests([FromQuery] string? status, [FromQuery] string? search)
+    public async Task<IActionResult> GetRequests([FromQuery] string? status, [FromQuery] string? search,
+        [FromQuery] int? page, [FromQuery] int? pageSize)
     {
+        if (page.HasValue || pageSize.HasValue)
+        {
+            var result = await _dashboardService.GetRequestsPageAsync(status, search,
+                Math.Max(1, page ?? 1), Math.Clamp(pageSize ?? 10, 1, 50));
+            return Ok(result);
+        }
         var requests = await _dashboardService.GetRequestsAsync(status, search);
         return Ok(requests);
     }

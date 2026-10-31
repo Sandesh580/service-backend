@@ -17,17 +17,14 @@ public class DashboardService : IDashboardService
 
     public async Task<DashboardStatsDto> GetStatsAsync()
     {
-        var total = await _context.ServiceRequests
-            .CountAsync(r => r.Status != "Completed" && r.Status != "Rejected");
-
-        var pending = await _context.ServiceRequests
-            .CountAsync(r => r.Status == "PendingApproval" || r.Status == "TechnicianPending");
-
-        var inProgress = await _context.ServiceRequests
-            .CountAsync(r => r.Status == "InProgress");
-
-        var completed = await _context.ServiceRequests
-            .CountAsync(r => r.Status == "Completed");
+        var counts = await _context.ServiceRequests.AsNoTracking()
+            .GroupBy(r => r.Status)
+            .Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToListAsync();
+        var total = counts.Where(item => item.Status != "Completed" && item.Status != "Rejected").Sum(item => item.Count);
+        var pending = counts.Where(item => item.Status == "PendingApproval" || item.Status == "TechnicianPending" || item.Status == "New").Sum(item => item.Count);
+        var inProgress = counts.Where(item => item.Status == "InProgress").Sum(item => item.Count);
+        var completed = counts.Where(item => item.Status == "Completed").Sum(item => item.Count);
 
         return new DashboardStatsDto
         {
@@ -41,10 +38,40 @@ public class DashboardService : IDashboardService
 
     public async Task<IEnumerable<ServiceRequestDto>> GetRequestsAsync(string? status = null, string? search = null)
     {
-        var query = _context.ServiceRequests.AsQueryable();
+        return await ProjectRequests(BuildRequestQuery(status, search))
+            .OrderByDescending(r => r.Date).ToListAsync();
+    }
+
+    public async Task<PagedResultDto<ServiceRequestDto>> GetRequestsPageAsync(string? status, string? search, int page, int pageSize)
+    {
+        var query = BuildRequestQuery(status, search);
+        var totalCount = await query.CountAsync();
+        var items = await ProjectRequests(query).OrderByDescending(r => r.Date)
+            .ThenByDescending(r => r.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+        return new PagedResultDto<ServiceRequestDto>
+        {
+            Items = items, Page = page, PageSize = pageSize, TotalCount = totalCount,
+            TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
+        };
+    }
+
+    private IQueryable<ServiceRequest> BuildRequestQuery(string? status, string? search)
+    {
+        var query = _context.ServiceRequests.AsNoTracking().AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(status))
-            query = query.Where(r => r.Status == status);
+        {
+            var filter = status.Trim().ToLowerInvariant();
+            query = filter switch
+            {
+                "active" => query.Where(r => r.Status != "Completed" && r.Status != "Rejected"),
+                "pending" => query.Where(r => r.Status == "PendingApproval" || r.Status == "TechnicianPending" || r.Status == "New"),
+                "inprogress" => query.Where(r => r.Status == "InProgress"),
+                "completed" => query.Where(r => r.Status == "Completed"),
+                "all" => query,
+                _ => query.Where(r => r.Status == status)
+            };
+        }
 
         if (!string.IsNullOrWhiteSpace(search))
             query = query.Where(r =>
@@ -53,8 +80,10 @@ public class DashboardService : IDashboardService
                 r.RequestNumber.Contains(search) ||
                 r.Issue.Contains(search));
 
-        return await query
-            .OrderByDescending(r => r.Date)
+        return query;
+    }
+
+    private static IQueryable<ServiceRequestDto> ProjectRequests(IQueryable<ServiceRequest> query) => query
             .Select(r => new ServiceRequestDto
             {
                 Id = r.Id,
@@ -90,9 +119,7 @@ public class DashboardService : IDashboardService
                     Name = link.InventoryPart.Name, ApplianceType = link.InventoryPart.ApplianceType,
                     Quantity = link.Quantity, AssignedAt = link.AssignedAt
                 }).ToList()
-            })
-            .ToListAsync();
-    }
+            });
 
     public async Task<ServiceRequestDto> CreateRequestAsync(CreateServiceRequestDto dto)
     {
