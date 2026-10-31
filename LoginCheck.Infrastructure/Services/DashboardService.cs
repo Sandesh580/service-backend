@@ -148,13 +148,15 @@ public class DashboardService : IDashboardService
         return ToResponse(request);
     }
 
-    public async Task<ServiceRequestDto?> UpdateAssignmentAsync(int id, string? assignedTechnician, string? managerNote)
+    public async Task<ServiceRequestDto?> UpdateAssignmentAsync(int id, string? assignedTechnician, string? managerNote, DateTime? nextVisitDate)
     {
         var request = await _context.ServiceRequests.Include(item => item.Parts).ThenInclude(link => link.InventoryPart)
             .SingleOrDefaultAsync(item => item.Id == id);
         if (request is null) return null;
 
         var previousTechnicianId = request.AssignedTechnicianId;
+        var visitDateChanged = request.NextVisitDate?.Date != nextVisitDate?.Date;
+        request.NextVisitDate = nextVisitDate;
         request.AssignedTechnician = string.IsNullOrWhiteSpace(assignedTechnician) ? null : assignedTechnician.Trim();
         request.AssignedTechnicianId = request.AssignedTechnician == null
             ? null
@@ -171,10 +173,14 @@ public class DashboardService : IDashboardService
         if (reassigned && previousTechnicianId is not null)
             AddTechnicianNotification(previousTechnicianId.Value, request, "Service call reassigned",
                 ManagerMessage(request, "This service call has been reassigned to another technician.", request.ManagerNote));
-        if (request.AssignedTechnicianId is not null && (reassigned || !string.IsNullOrWhiteSpace(request.ManagerNote)))
+        if (request.AssignedTechnicianId is not null && (reassigned || visitDateChanged || !string.IsNullOrWhiteSpace(request.ManagerNote)))
         {
             var title = reassigned ? "Service call assigned" : "Service call updated by manager";
-            var summary = reassigned ? "A service call has been assigned to you." : "The manager updated this call.";
+            var summary = reassigned
+                ? "A service call has been assigned to you."
+                : visitDateChanged
+                    ? nextVisitDate is { } scheduled ? $"The manager scheduled a visit for {scheduled:dd MMM yyyy}." : "The manager cleared the scheduled visit date."
+                    : "The manager updated this call.";
             AddTechnicianNotification(request.AssignedTechnicianId.Value, request, title, ManagerMessage(request, summary, request.ManagerNote));
         }
         await _context.SaveChangesAsync();

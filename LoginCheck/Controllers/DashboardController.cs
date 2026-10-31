@@ -50,7 +50,7 @@ public class DashboardController : ControllerBase
     {
         try
         {
-            var result = await _dashboardService.UpdateAssignmentAsync(id, dto.AssignedTechnician, dto.ManagerNote);
+            var result = await _dashboardService.UpdateAssignmentAsync(id, dto.AssignedTechnician, dto.ManagerNote, dto.NextVisitDate);
             if (result is null) return NotFound();
             return Ok(result);
         }
@@ -79,4 +79,5 @@ public class UpdateAssignmentDto
 {
     public string? AssignedTechnician { get; set; }
     [System.ComponentModel.DataAnnotations.StringLength(2000)] public string? ManagerNote { get; set; }
+    public DateTime? NextVisitDate { get; set; }
 }
