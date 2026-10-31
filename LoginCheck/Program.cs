@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.SqlClient;
 using Microsoft.IdentityModel.Tokens;
+using MySql.Data.MySqlClient;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -28,18 +29,39 @@ builder.Services.AddCors(options =>
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? "Server=(localdb)\\mssqllocaldb;Database=LoginCheckDb;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;";
+var isMySql = Uri.TryCreate(connectionString, UriKind.Absolute, out var databaseUri)
+    && databaseUri.Scheme.Equals("mysql", StringComparison.OrdinalIgnoreCase);
+if (isMySql)
+{
+    var credentials = databaseUri!.UserInfo.Split(':', 2);
+    if (credentials.Length != 2)
+        throw new InvalidOperationException("The hosted MySQL URL must include a username and password.");
+
+    connectionString = new MySqlConnectionStringBuilder
+    {
+        Server = databaseUri.Host,
+        Port = checked((uint)databaseUri.Port),
+        Database = Uri.UnescapeDataString(databaseUri.AbsolutePath.Trim('/')),
+        UserID = Uri.UnescapeDataString(credentials[0]),
+        Password = Uri.UnescapeDataString(credentials[1]),
+        SslMode = MySqlSslMode.Required
+    }.ConnectionString;
+}
 var useInMemoryDevelopmentFallback = false;
 var allowInMemoryDevelopmentFallback = builder.Environment.IsDevelopment()
     && builder.Configuration.GetValue<bool>("Database:AllowInMemoryFallback");
 
 try
 {
-    var masterConnectionString = new SqlConnectionStringBuilder(connectionString)
+    if (!isMySql)
     {
-        InitialCatalog = "master"
-    }.ConnectionString;
-    using var connection = new SqlConnection(masterConnectionString);
-    connection.Open();
+        var masterConnectionString = new SqlConnectionStringBuilder(connectionString)
+        {
+            InitialCatalog = "master"
+        }.ConnectionString;
+        using var connection = new SqlConnection(masterConnectionString);
+        connection.Open();
+    }
 }
 catch (SqlException exception) when (allowInMemoryDevelopmentFallback)
 {
@@ -51,6 +73,8 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
     if (useInMemoryDevelopmentFallback)
         options.UseInMemoryDatabase("LoginCheckDevelopmentFallback");
+    else if (isMySql)
+        options.UseMySQL(connectionString);
     else
         options.UseSqlServer(connectionString);
 });
@@ -89,6 +113,8 @@ using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     dbContext.Database.EnsureCreated();
+    if (!isMySql)
+    {
     dbContext.Database.ExecuteSqlRaw("""
         IF COL_LENGTH('dbo.Users', 'Specialties') IS NULL ALTER TABLE dbo.Users ADD Specialties nvarchar(300) NOT NULL CONSTRAINT DF_Users_Specialties DEFAULT N'';
         IF COL_LENGTH('dbo.Users', 'EducationQualification') IS NULL ALTER TABLE dbo.Users ADD EducationQualification nvarchar(200) NOT NULL CONSTRAINT DF_Users_EducationQualification DEFAULT N'';
@@ -145,6 +171,9 @@ using (var scope = app.Services.CreateScope())
         IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ServiceRequests_AssignedTechnicianId' AND object_id = OBJECT_ID('dbo.ServiceRequests')) CREATE INDEX IX_ServiceRequests_AssignedTechnicianId ON dbo.ServiceRequests(AssignedTechnicianId);
         IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ServiceNotifications_RecipientUserId_CreatedAt' AND object_id = OBJECT_ID('dbo.ServiceNotifications')) CREATE INDEX IX_ServiceNotifications_RecipientUserId_CreatedAt ON dbo.ServiceNotifications(RecipientUserId, CreatedAt DESC);
         """);
+    }
+    if (isMySql)
+        SeedInventoryParts(dbContext);
     SeedData(dbContext);
 }
 
@@ -231,5 +260,22 @@ static void SeedData(ApplicationDbContext db)
     }
 
     db.ServiceRequests.AddRange(requests);
+    db.SaveChanges();
+}
+
+static void SeedInventoryParts(ApplicationDbContext db)
+{
+    if (db.InventoryParts.Any()) return;
+
+    db.InventoryParts.AddRange(
+        new InventoryPart { Sku = "FRG-WF-001", Name = "Refrigerator water filter", ApplianceType = "Refrigerator", Description = "Inline replacement filter for compatible refrigerator models.", QuantityInStock = 12, UnitPrice = 24.99m },
+        new InventoryPart { Sku = "FRG-TH-002", Name = "Refrigerator thermostat", ApplianceType = "Refrigerator", Description = "Temperature control thermostat assembly.", QuantityInStock = 7, UnitPrice = 39.50m },
+        new InventoryPart { Sku = "WASH-DP-001", Name = "Washer drain pump", ApplianceType = "Washing machine", Description = "Drain pump assembly for front and top load washers.", QuantityInStock = 8, UnitPrice = 58.00m },
+        new InventoryPart { Sku = "WASH-IV-002", Name = "Washer inlet valve", ApplianceType = "Washing machine", Description = "Dual water inlet valve assembly.", QuantityInStock = 10, UnitPrice = 31.75m },
+        new InventoryPart { Sku = "DISH-CMP-001", Name = "Dishwasher circulation pump", ApplianceType = "Dishwasher", Description = "Wash circulation pump and motor assembly.", QuantityInStock = 4, UnitPrice = 112.00m },
+        new InventoryPart { Sku = "DISH-DL-002", Name = "Dishwasher door latch", ApplianceType = "Dishwasher", Description = "Door latch and switch replacement kit.", QuantityInStock = 9, UnitPrice = 27.25m },
+        new InventoryPart { Sku = "DRY-HE-001", Name = "Dryer heating element", ApplianceType = "Dryer", Description = "Electric dryer heating element assembly.", QuantityInStock = 6, UnitPrice = 76.00m },
+        new InventoryPart { Sku = "AC-CAP-001", Name = "Air conditioner run capacitor", ApplianceType = "Air conditioner", Description = "Dual run capacitor for common residential AC units.", QuantityInStock = 14, UnitPrice = 22.50m },
+        new InventoryPart { Sku = "OVN-IGN-001", Name = "Oven igniter", ApplianceType = "Oven", Description = "Universal gas oven igniter replacement part.", QuantityInStock = 5, UnitPrice = 44.00m });
     db.SaveChanges();
 }
