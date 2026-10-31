@@ -6,6 +6,7 @@ using LoginCheck.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using MySql.Data.MySqlClient;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -27,8 +28,29 @@ builder.Services.AddCors(options =>
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? "Server=(localdb)\\mssqllocaldb;Database=LoginCheckDb;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True;";
 
+// Aiven and other hosted services commonly provide a mysql:// URI. Convert it
+// to Connector/NET's connection-string format while keeping credentials out of source.
+if (Uri.TryCreate(connectionString, UriKind.Absolute, out var databaseUri)
+    && databaseUri.Scheme.Equals("mysql", StringComparison.OrdinalIgnoreCase))
+{
+    var credentials = databaseUri.UserInfo.Split(':', 2);
+    if (credentials.Length != 2)
+        throw new InvalidOperationException("The hosted MySQL URL must include a username and password.");
+
+    var mysql = new MySqlConnectionStringBuilder
+    {
+        Server = databaseUri.Host,
+        Port = checked((uint)databaseUri.Port),
+        Database = Uri.UnescapeDataString(databaseUri.AbsolutePath.Trim('/')),
+        UserID = Uri.UnescapeDataString(credentials[0]),
+        Password = Uri.UnescapeDataString(credentials[1]),
+        SslMode = MySqlSslMode.Required
+    };
+    connectionString = mysql.ConnectionString;
+}
+
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(connectionString));
+    options.UseMySQL(connectionString));
 
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();

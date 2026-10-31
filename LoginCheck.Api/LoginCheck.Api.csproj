@@ -11,6 +11,7 @@
 	<PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.14" />
 	<PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.14" />
 	<PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.14" />
+	<PackageReference Include="MySql.EntityFrameworkCore" Version="10.0.12" />
 	<PackageReference Include="Scalar.AspNetCore" Version="2.18.3" />
   </ItemGroup>
 
