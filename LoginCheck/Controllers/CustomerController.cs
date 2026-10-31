@@ -109,6 +109,13 @@ public sealed class CustomerController : ControllerBase
         appliance = string.IsNullOrWhiteSpace(appliance) ? type : $"{type} · {appliance}";
         var category = dto.IssueCategory.Trim();
         var description = (dto.Description ?? string.Empty).Trim();
+        var profileAddress = string.IsNullOrWhiteSpace(customer.Address) ? customer.CurrentAddress : customer.Address;
+        var serviceAddress = string.IsNullOrWhiteSpace(dto.ServiceAddress)
+            ? profileAddress?.Trim() ?? string.Empty
+            : dto.ServiceAddress.Trim();
+        var customerPhone = string.IsNullOrWhiteSpace(customer.Phone)
+            ? dto.CustomerPhone?.Trim() ?? string.Empty
+            : customer.Phone.Trim();
         var issue = string.IsNullOrWhiteSpace(description) ? category : $"{category}: {description}";
         if (appliance.Length > 100) appliance = appliance[..100];
         if (issue.Length > 500) issue = issue[..500];
@@ -119,7 +126,7 @@ public sealed class CustomerController : ControllerBase
             Appliance = appliance, Issue = issue, ProblemDescription = description, Status = "New", Priority = "-",
             Date = DateTime.UtcNow, CreatedAt = DateTime.UtcNow, CustomerUserId = userId,
             ApplianceBrand = brand, ApplianceModel = model, SerialNumber = dto.SerialNumber.Trim(),
-            CustomerPhone = dto.CustomerPhone.Trim(), ServiceAddress = dto.ServiceAddress.Trim(),
+            CustomerPhone = customerPhone, ServiceAddress = serviceAddress,
             Latitude = dto.Latitude, Longitude = dto.Longitude,
             PreferredServiceDate = dto.PreferredServiceDate is { } visitDate ? DateTime.SpecifyKind(visitDate.Date, DateTimeKind.Unspecified) : null,
             IssueCategory = category
@@ -152,8 +159,9 @@ public sealed class BookServiceRequestDto
     [StringLength(100)] public string SerialNumber { get; set; } = string.Empty;
     [Required, StringLength(100)] public string IssueCategory { get; set; } = string.Empty;
     [StringLength(1000)] public string? Description { get; set; }
-    [Required, Phone, StringLength(40)] public string CustomerPhone { get; set; } = string.Empty;
-    [Required, MinLength(8), StringLength(500)] public string ServiceAddress { get; set; } = string.Empty;
+    // Kept for older clients; the authenticated account phone is authoritative.
+    [StringLength(40)] public string? CustomerPhone { get; set; }
+    [StringLength(500)] public string? ServiceAddress { get; set; }
     [Required] public DateTime? PreferredServiceDate { get; set; }
     [Required, Range(-90d, 90d)] public double? Latitude { get; set; }
     [Required, Range(-180d, 180d)] public double? Longitude { get; set; }
